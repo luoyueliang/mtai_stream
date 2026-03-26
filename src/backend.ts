@@ -1,5 +1,17 @@
 import { config } from './config'
 
+/** 构建 Backend 请求 headers，生产环境注入 Host 头确保 Nginx 路由正确 */
+function backendHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    'X-Internal-Token': config.laravel.internalToken(),
+    ...extra,
+  }
+  if (config.laravel.host) h['Host'] = config.laravel.host
+  return h
+}
+
 /** Backend init 接口返回的完整 AI 调用配置 */
 export interface StreamInitResult {
   task_id: number
@@ -31,12 +43,7 @@ export async function initStream(
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-Internal-Token': config.laravel.internalToken(),
-      Authorization: bearerToken,
-    },
+    headers: backendHeaders({ Authorization: bearerToken }),
     body: JSON.stringify(body),
   })
 
@@ -79,10 +86,7 @@ export async function settleTask(taskId: number, payload: SettlePayload): Promis
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Internal-Token': config.laravel.internalToken(),
-    },
+    headers: backendHeaders(),
     body: JSON.stringify(payload),
   })
 

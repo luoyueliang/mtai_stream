@@ -16,6 +16,8 @@ export const config = {
 
   laravel: {
     baseUrl: process.env.LARAVEL_BASE_URL ?? 'http://127.0.0.1:80',
+    /** 生产环境 Nginx 需要正确的 Host 头路由到 Laravel server block */
+    host: process.env.LARAVEL_HOST ?? '',
     internalToken: () => requireEnv('INTERNAL_TOKEN'),
   },
 
