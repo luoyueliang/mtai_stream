@@ -33,6 +33,7 @@ export async function initStream(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      Accept: 'application/json',
       'X-Internal-Token': config.laravel.internalToken(),
       Authorization: bearerToken,
     },
