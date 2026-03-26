@@ -47,12 +47,22 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     // ── 建立 SSE 流 ──────────────────────────────────────────────────────
     reply.hijack()
-    reply.raw.writeHead(200, {
+
+    // hijack 后 Fastify 不再写响应，需手动带上 CORS 头
+    const corsHeaders: Record<string, string> = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
-    })
+    }
+    const origin = request.headers.origin
+    if (origin) {
+      const allowed = config.cors.origin.split(',').map((s) => s.trim())
+      if (allowed.includes(origin)) {
+        corsHeaders['Access-Control-Allow-Origin'] = origin
+      }
+    }
+    reply.raw.writeHead(200, corsHeaders)
 
     const writeSse = (event: string, data: Record<string, unknown>): boolean => {
       if (reply.raw.destroyed) return false
