@@ -14,14 +14,13 @@ export const config = {
   port: parseInt(process.env.PORT ?? '3100', 10),
   nodeEnv: process.env.NODE_ENV ?? 'development',
 
-  redis: {
-    url: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
-    db: parseInt(process.env.REDIS_DB ?? '3', 10),
-  },
-
   laravel: {
     baseUrl: process.env.LARAVEL_BASE_URL ?? 'http://127.0.0.1:80',
     internalToken: () => requireEnv('INTERNAL_TOKEN'),
+  },
+
+  cors: {
+    origin: process.env.CORS_ORIGIN ?? 'https://ai.mtedu.com',
   },
 
   task: {

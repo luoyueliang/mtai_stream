@@ -1,7 +1,6 @@
 import Fastify from 'fastify'
 import { config } from './config'
-import { startRedisSubscriber } from './redis/subscriber'
-import { registerSseRoutes } from './routes/sse'
+import { registerConversationRoutes } from './routes/conversations'
 
 const app = Fastify({
   logger: {
@@ -9,19 +8,34 @@ const app = Fastify({
   },
 })
 
+// ── CORS（ai.mtedu.com → stream.ai.mtedu.com 跨域） ────────────────────────
+app.addHook('onRequest', (request, reply, done) => {
+  const origin = request.headers.origin
+  if (origin) {
+    const allowed = config.cors.origin.split(',').map((s) => s.trim())
+    if (allowed.includes(origin)) {
+      reply.header('Access-Control-Allow-Origin', origin)
+    }
+    reply.header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    reply.header('Access-Control-Max-Age', '86400')
+  }
+  if (request.method === 'OPTIONS') {
+    reply.status(204).send()
+    return
+  }
+  done()
+})
+
 // ── 健康检查 ────────────────────────────────────────────────────────────────
 app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }))
 
 // ── 启动 ─────────────────────────────────────────────────────────────────────
 async function bootstrap(): Promise<void> {
-  // SSE 路由注册
-  await registerSseRoutes(app)
-
-  // 先启动 Redis 订阅（在 HTTP 服务就绪前开始监听，避免错过早到的任务消息）
-  startRedisSubscriber()
+  await registerConversationRoutes(app)
 
   await app.listen({ port: config.port, host: '0.0.0.0' })
-  console.log(`[mtai-stream] 流式代理服务已启动，端口 ${config.port}`)
+  console.log(`[mtai-stream] v2 流式代理已启动，端口 ${config.port}`)
 }
 
 bootstrap().catch((err) => {

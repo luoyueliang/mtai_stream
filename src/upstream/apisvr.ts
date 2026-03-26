@@ -1,5 +1,5 @@
-import { taskManager } from '../tasks/manager'
-import { settleTask, fetchStreamConfig } from '../settle'
+import type { StreamInitResult } from '../backend'
+import { settleTask } from '../backend'
 
 interface OpenAiChunk {
   choices?: Array<{
@@ -13,35 +13,19 @@ interface OpenAiChunk {
   }
 }
 
+type WriteSse = (event: string, data: Record<string, unknown>) => boolean
+
 /**
- * 调用 apisvr（OpenAI 兼容 API），消费 SSE 流，将 token 实时推送给浏览器
+ * 调用 apisvr（OpenAI 兼容 API），消费 SSE 流，
+ * 通过 writeSse 回调实时推送给浏览器。
  *
- * 流程：
- *   1. 从 Laravel 拉取任务配置（model、messages、api_key 等）
- *   2. POST {base_url}/chat/completions（stream=true）
- *   3. 逐行解析 `data: {...}` SSE 事件
- *   4. 每个 content delta → emit token 事件到 taskManager
- *   5. 结束时：emit done，调用 settleTask 回调 Laravel
+ * 完成后：发送 done 事件 + 异步调 settle 回调 Backend。
  */
-export async function streamFromApisvr(taskId: number): Promise<void> {
-  let streamConfig
-
-  try {
-    streamConfig = await fetchStreamConfig(taskId)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    taskManager.emit(taskId, { type: 'error', data: { task_id: taskId, message } })
-    taskManager.finish(taskId)
-    return
-  }
-
-  const { base_url, api_key, model, messages, temperature, max_tokens, user_id } = streamConfig
-
-  // 确保任务状态已创建（subscriber 应先调用 taskManager.create）
-  if (!taskManager.get(taskId)) {
-    const { config } = await import('../config')
-    taskManager.create(taskId, user_id, config.task.timeoutMs)
-  }
+export async function streamFromApisvr(
+  init: StreamInitResult,
+  writeSse: WriteSse,
+): Promise<void> {
+  const { task_id, base_url, api_key, model, messages, temperature, max_tokens } = init
 
   const body: Record<string, unknown> = {
     model,
@@ -52,31 +36,31 @@ export async function streamFromApisvr(taskId: number): Promise<void> {
   if (temperature !== null) body.temperature = temperature
   if (max_tokens !== null) body.max_tokens = max_tokens
 
+  const res = await fetch(`${base_url}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${api_key}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`apisvr 返回错误 [${res.status}]: ${text}`)
+  }
+
   let accumulatedText = ''
   let promptTokens = 0
   let completionTokens = 0
   let totalTokens = 0
   const startMs = Date.now()
 
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+
   try {
-    const res = await fetch(`${base_url}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${api_key}`,
-      },
-      body: JSON.stringify(body),
-    })
-
-    if (!res.ok || !res.body) {
-      const text = await res.text().catch(() => '')
-      throw new Error(`apisvr 返回错误 [${res.status}]: ${text}`)
-    }
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buf = ''
-
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -100,7 +84,6 @@ export async function streamFromApisvr(taskId: number): Promise<void> {
           continue
         }
 
-        // 收集 usage（通常在最后一个带 finish_reason 的 chunk 或独立 chunk）
         if (chunk.usage) {
           promptTokens = chunk.usage.prompt_tokens ?? promptTokens
           completionTokens = chunk.usage.completion_tokens ?? completionTokens
@@ -110,38 +93,27 @@ export async function streamFromApisvr(taskId: number): Promise<void> {
         const content = chunk.choices?.[0]?.delta?.content
         if (content) {
           accumulatedText += content
-          taskManager.emit(taskId, {
-            type: 'token',
-            data: { content, task_id: taskId },
-          })
+          if (!writeSse('token', { content, task_id })) {
+            // 浏览器已断开，但继续消费完上游流以便 settle
+          }
         }
       }
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    taskManager.emit(taskId, { type: 'error', data: { task_id: taskId, message } })
-    taskManager.finish(taskId)
-    return
+  } finally {
+    reader.releaseLock()
   }
 
   const executionTimeMs = Date.now() - startMs
 
-  // 推送 done 事件
-  taskManager.emit(taskId, {
-    type: 'done',
-    data: { task_id: taskId, total_tokens: totalTokens, execution_time_ms: executionTimeMs },
-  })
-  taskManager.finish(taskId)
+  writeSse('done', { task_id, total_tokens: totalTokens, execution_time_ms: executionTimeMs })
 
-  // 回调 Laravel 结算
-  try {
-    await settleTask(taskId, {
-      output: accumulatedText,
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: totalTokens,
-    })
-  } catch (err) {
-    console.error(`[settle] task ${taskId} 结算失败:`, err)
-  }
+  // settle 异步执行，不阻塞 SSE 响应关闭
+  settleTask(task_id, {
+    output: accumulatedText,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: totalTokens,
+  }).catch((err) => {
+    console.error(`[settle] task ${task_id} 结算失败:`, err)
+  })
 }
