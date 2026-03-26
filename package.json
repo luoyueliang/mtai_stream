@@ -1,0 +1,24 @@
+{
+  "name": "mtai-stream",
+  "version": "0.1.0",
+  "description": "mtai 流式代理服务 — SSE streaming layer between Dify/apisvr and browser",
+  "private": true,
+  "scripts": {
+    "dev": "node node_modules/tsx/dist/cli.mjs watch src/index.ts",
+    "build": "node node_modules/typescript/bin/tsc",
+    "start": "node dist/index.js",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
+  },
+  "dependencies": {
+    "eventsource": "^2.0.2",
+    "fastify": "^5.3.3",
+    "ioredis": "^5.6.1",
+    "undici": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/eventsource": "^1.1.15",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}
