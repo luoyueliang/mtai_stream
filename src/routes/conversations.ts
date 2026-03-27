@@ -7,6 +7,7 @@ interface ConversationBody {
   agent_id: number
   message: string
   conversation_id?: number
+  model?: string
 }
 
 /**
@@ -32,13 +33,19 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     }
 
     // ── 调 Backend init（鉴权 + 创建 Task + 返回 AI 调用配置）──────────────
+    // 透传前端 X-Tenant-ID，让 Backend 正确识别租户上下文
+    const forwardHeaders: Record<string, string> = {}
+    const tenantId = request.headers['x-tenant-id']
+    if (typeof tenantId === 'string') forwardHeaders['X-Tenant-ID'] = tenantId
+
     let initResult
     try {
       initResult = await initStream(authHeader, {
         agent_id: body.agent_id,
         message: body.message,
         conversation_id: body.conversation_id,
-      })
+        model: body.model,
+      }, forwardHeaders)
     } catch (err: unknown) {
       const status = (err as { statusCode?: number }).statusCode ?? 502
       const message = err instanceof Error ? err.message : 'Backend 初始化失败'

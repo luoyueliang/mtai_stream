@@ -37,13 +37,14 @@ export interface StreamInitResult {
  */
 export async function initStream(
   bearerToken: string,
-  body: { agent_id: number; message: string; conversation_id?: number },
+  body: { agent_id: number; message: string; conversation_id?: number; model?: string },
+  extraHeaders?: Record<string, string>,
 ): Promise<StreamInitResult> {
   const url = `${config.laravel.baseUrl}/api/internal/stream/init`
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: backendHeaders({ Authorization: bearerToken }),
+    headers: backendHeaders({ Authorization: bearerToken, ...extraHeaders }),
     body: JSON.stringify(body),
   })
 

@@ -27,6 +27,11 @@ export async function streamFromApisvr(
 ): Promise<void> {
   const { task_id, base_url, api_key, model, messages, temperature, max_tokens } = init
 
+  // 兼容 base_url 是否以 /v1 结尾的情况
+  const endpoint = base_url.endsWith('/v1')
+    ? `${base_url}/chat/completions`
+    : `${base_url}/v1/chat/completions`
+
   const body: Record<string, unknown> = {
     model,
     messages,
@@ -36,7 +41,7 @@ export async function streamFromApisvr(
   if (temperature !== null) body.temperature = temperature
   if (max_tokens !== null) body.max_tokens = max_tokens
 
-  const res = await fetch(`${base_url}/chat/completions`, {
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
