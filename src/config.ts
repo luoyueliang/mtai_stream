@@ -25,6 +25,12 @@ export const config = {
     origin: process.env.CORS_ORIGIN ?? 'https://ai.mtedu.com',
   },
 
+  redis: {
+    host: process.env.REDIS_HOST ?? '127.0.0.1',
+    port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+  },
+
   task: {
     timeoutMs: parseInt(process.env.TASK_TIMEOUT_MS ?? '120000', 10),
   },

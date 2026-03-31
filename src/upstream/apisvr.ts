@@ -3,7 +3,7 @@ import { settleTask } from '../backend'
 
 interface OpenAiChunk {
   choices?: Array<{
-    delta?: { content?: string }
+    delta?: { content?: string; reasoning_content?: string }
     finish_reason?: string | null
   }>
   usage?: {
@@ -25,7 +25,7 @@ export async function streamFromApisvr(
   init: StreamInitResult,
   writeSse: WriteSse,
 ): Promise<void> {
-  const { task_id, base_url, api_key, model, messages, temperature, max_tokens } = init
+  const { task_id, base_url, api_key, model, messages, temperature, max_tokens, enable_thinking } = init
 
   // 兼容 base_url 是否以 /v1 结尾的情况
   const endpoint = base_url.endsWith('/v1')
@@ -40,6 +40,7 @@ export async function streamFromApisvr(
   }
   if (temperature !== null) body.temperature = temperature
   if (max_tokens !== null) body.max_tokens = max_tokens
+  if (enable_thinking) body.enable_thinking = true
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -56,6 +57,7 @@ export async function streamFromApisvr(
   }
 
   let accumulatedText = ''
+  let accumulatedThinking = ''
   let promptTokens = 0
   let completionTokens = 0
   let totalTokens = 0
@@ -95,6 +97,15 @@ export async function streamFromApisvr(
           totalTokens = chunk.usage.total_tokens ?? totalTokens
         }
 
+        const reasoning = chunk.choices?.[0]?.delta?.reasoning_content
+        if (reasoning) {
+          accumulatedThinking += reasoning
+          // 推理内容包裹在 <think> 标签中，前端 parseOutputFull 会解析
+          if (!writeSse('token', { content: reasoning, task_id, reasoning: true })) {
+            // 浏览器已断开，但继续消费完上游流以便 settle
+          }
+        }
+
         const content = chunk.choices?.[0]?.delta?.content
         if (content) {
           accumulatedText += content
@@ -113,8 +124,11 @@ export async function streamFromApisvr(
   writeSse('done', { task_id, total_tokens: totalTokens, execution_time_ms: executionTimeMs })
 
   // settle 异步执行，不阻塞 SSE 响应关闭
+  const fullOutput = accumulatedThinking
+    ? `<think>${accumulatedThinking}</think>${accumulatedText}`
+    : accumulatedText
   settleTask(task_id, {
-    output: accumulatedText,
+    output: fullOutput,
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
     total_tokens: totalTokens,

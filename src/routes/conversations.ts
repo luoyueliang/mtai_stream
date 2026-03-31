@@ -8,6 +8,7 @@ interface ConversationBody {
   message: string
   conversation_id?: number
   model?: string
+  enable_thinking?: boolean
 }
 
 /**
@@ -45,6 +46,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         message: body.message,
         conversation_id: body.conversation_id,
         model: body.model,
+        enable_thinking: body.enable_thinking,
       }, forwardHeaders)
     } catch (err: unknown) {
       const status = (err as { statusCode?: number }).statusCode ?? 502

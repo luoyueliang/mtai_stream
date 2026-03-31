@@ -25,6 +25,7 @@ export interface StreamInitResult {
   messages: Array<{ role: string; content: string }>
   temperature: number | null
   max_tokens: number | null
+  enable_thinking: boolean
 }
 
 /**
@@ -37,7 +38,7 @@ export interface StreamInitResult {
  */
 export async function initStream(
   bearerToken: string,
-  body: { agent_id: number; message: string; conversation_id?: number; model?: string },
+  body: { agent_id: number; message: string; conversation_id?: number; model?: string; enable_thinking?: boolean },
   extraHeaders?: Record<string, string>,
 ): Promise<StreamInitResult> {
   const url = `${config.laravel.baseUrl}/api/internal/stream/init`
