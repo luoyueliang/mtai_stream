@@ -39,12 +39,12 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(status).send({ message: 'Token 验证失败' })
       }
 
-      const data = (await authRes.json()) as { user_id?: number }
+      const data = (await authRes.json()) as { user_id?: number | string }
       if (!data.user_id) {
         return reply.status(401).send({ message: 'Token 无效' })
       }
 
-      userId = data.user_id
+      userId = Number(data.user_id)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Auth verification failed'
       return reply.status(502).send({ message })
@@ -101,8 +101,8 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     subscriber.on('message', (_channel: string, message: string) => {
       try {
         const data = JSON.parse(message) as { user_id?: number; task_id?: number; type?: string; status?: string; title?: string }
-        // 只推送属于当前用户的任务状态
-        if (data.user_id !== userId) return
+        // 只推送属于当前用户的任务状态（需类型转换：auth/verify 可能返回 string）
+        if (Number(data.user_id) !== userId) return
 
         // title_generated 事件（异步标题生成完成）
         if (data.type === 'title_generated') {
