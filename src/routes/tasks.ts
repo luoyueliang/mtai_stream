@@ -113,6 +113,22 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
           return
         }
 
+        // task_progress 事件（中间进度：partial_output / 节点状态）
+        if (data.type === 'task_progress') {
+          const payload: Record<string, unknown> = {
+            task_id: data.task_id,
+            status: (data as Record<string, unknown>).status,
+          }
+          if ((data as Record<string, unknown>).partial_output !== undefined) {
+            payload.partial_output = (data as Record<string, unknown>).partial_output
+          }
+          if ((data as Record<string, unknown>).nodes !== undefined) {
+            payload.nodes = (data as Record<string, unknown>).nodes
+          }
+          writeSse('task_progress', payload)
+          return
+        }
+
         // task_status 事件（任务状态变更）
         writeSse('task_status', {
           task_id: data.task_id,
