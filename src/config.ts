@@ -29,6 +29,8 @@ export const config = {
     host: process.env.REDIS_HOST ?? '127.0.0.1',
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
+    /** Laravel Redis prefix — must match config('database.redis.options.prefix') */
+    prefix: process.env.REDIS_PREFIX ?? '',
   },
 
   task: {

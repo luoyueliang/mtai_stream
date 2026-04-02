@@ -87,7 +87,8 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
       },
     })
 
-    subscriber.subscribe('task-status', (err) => {
+    const channel = `${config.redis.prefix}task-status`
+    subscriber.subscribe(channel, (err) => {
       if (err) {
         app.log.error(`[task-subscribe] Redis subscribe failed: ${err.message}`)
         writeSse('error', { message: 'Redis 订阅失败' })
@@ -95,7 +96,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         subscriber.disconnect()
         return
       }
-      app.log.info(`[task-subscribe] User ${userId} subscribed to task-status`)
+      app.log.info(`[task-subscribe] User ${userId} subscribed to ${channel}`)
     })
 
     subscriber.on('message', (_channel: string, message: string) => {
@@ -155,7 +156,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
     // ── 客户端断开 → 清理 ────────────────────────────────────────────────
     request.raw.on('close', () => {
       clearInterval(heartbeat)
-      subscriber.unsubscribe('task-status')
+      subscriber.unsubscribe(channel)
       subscriber.disconnect()
       app.log.info(`[task-subscribe] User ${userId} disconnected`)
     })
