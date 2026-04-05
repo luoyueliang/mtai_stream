@@ -110,6 +110,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
           writeSse('title_generated', {
             task_id: data.task_id,
             title: data.title ?? '',
+            summary: (data as Record<string, unknown>).summary ?? null,
           })
           return
         }
