@@ -39,6 +39,24 @@ front (UI) → backend (鉴权/积分/Task) → stream (SSE 流式代理) → di
 - ✅ 直接修改代码和必要的技术文档
 - ✅ 在 Git commit 中记录修改内容
 
+### ⚠️ Stream 路径与 Backend 双路径参数同步
+
+mtai_stream 的 `POST /api/conversations` 路由调用 backend `InternalTaskController::init()` 获取 AI 调用参数。Backend 同时存在另一条路径（`ConversationController` → `ProcessAiTask` Job）用于 workflow 模式。
+
+**两条路径支持的参数必须保持一致：**
+
+| 路径 | 触发方式 | 适用模式 |
+|------|---------|----------|
+| **Stream** | 前端 → mtai_stream → `InternalTaskController::init()` | chat |
+| **Poll** | 前端 → `ConversationController` → Job | workflow / completion |
+
+当 stream 端需要传递新的 AI 参数（如 model、enable_thinking、temperature 等）时，必须同时确认：
+1. stream 在 `conversations.ts` 中将参数传给 backend init API
+2. backend `InternalTaskController::init()` 接受并返回该参数
+3. backend `ConversationController` 的 poll 路径也支持相同参数
+
+**历史教训（2026-04-05）：** backend `ConversationController` 已添加 model/enable_thinking 支持，但 `InternalTaskController::init()` 遗漏，导致 chat 模式下模型选择和思维链功能完全失效。
+
 ## 📋 核心规范
 
 ### 1. TypeScript 编译配置
