@@ -20,6 +20,8 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
 
     // ── 验证 token ──────────────────────────────────────────────────────
     let userId: number
+    let currentSessionToken: string | null = null
+    let isGuest = false
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -39,12 +41,14 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(status).send({ message: 'Token 验证失败' })
       }
 
-      const data = (await authRes.json()) as { user_id?: number | string }
+      const data = (await authRes.json()) as { user_id?: number | string; session_token?: string; is_guest?: boolean }
       if (!data.user_id) {
         return reply.status(401).send({ message: 'Token 无效' })
       }
 
       userId = Number(data.user_id)
+      currentSessionToken = data.session_token ?? null
+      isGuest = data.is_guest ?? false
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Auth verification failed'
       return reply.status(502).send({ message })
@@ -75,7 +79,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
       return true
     }
 
-    writeSse('connected', { user_id: userId })
+    writeSse('connected', { user_id: userId, session_token: currentSessionToken })
 
     // ── Redis 订阅 ──────────────────────────────────────────────────────
     const subscriber = new Redis({
@@ -104,6 +108,11 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
         const data = JSON.parse(message) as { user_id?: number; task_id?: number; type?: string; status?: string; title?: string }
         // 只推送属于当前用户的任务状态（需类型转换：auth/verify 可能返回 string）
         if (Number(data.user_id) !== userId) return
+
+        // Guest 用户需要额外匹配 session_token，避免收到其他 guest 的事件
+        if (isGuest && (data as Record<string, unknown>).session_token && (data as Record<string, unknown>).session_token !== currentSessionToken) {
+          return
+        }
 
         // title_generated 事件（异步标题生成完成）
         if (data.type === 'title_generated') {

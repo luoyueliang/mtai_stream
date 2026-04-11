@@ -37,15 +37,18 @@ export interface StreamInitResult {
  * 失败时抛出带 statusCode 的 Error（401/402/404/500），由路由层转发给浏览器。
  */
 export async function initStream(
-  bearerToken: string,
+  bearerToken: string | undefined,
   body: { agent_id: number; message: string; conversation_id?: number; model?: string; enable_thinking?: boolean },
   extraHeaders?: Record<string, string>,
 ): Promise<StreamInitResult> {
   const url = `${config.laravel.baseUrl}/api/internal/stream/init`
 
+  const extra: Record<string, string> = { ...extraHeaders }
+  if (bearerToken) extra['Authorization'] = bearerToken
+
   const res = await fetch(url, {
     method: 'POST',
-    headers: backendHeaders({ Authorization: bearerToken, ...extraHeaders }),
+    headers: backendHeaders(extra),
     body: JSON.stringify(body),
   })
 

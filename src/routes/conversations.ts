@@ -23,9 +23,12 @@ interface ConversationBody {
 export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/conversations', async (request: FastifyRequest, reply: FastifyReply) => {
     // ── 参数校验 ──────────────────────────────────────────────────────────
-    const authHeader = request.headers.authorization
-    if (!authHeader?.startsWith('Bearer ')) {
-      return reply.status(401).send({ message: '缺少 Authorization 头' })
+    const authHeader = request.headers.authorization as string | undefined
+    const sessionToken = request.headers['x-session-token'] as string | undefined
+
+    // 无 Authorization 且无 X-Session-Token → 401
+    if (!authHeader && !sessionToken) {
+      return reply.status(401).send({ message: '缺少 Authorization 或 X-Session-Token' })
     }
 
     const body = request.body as ConversationBody | null
@@ -34,10 +37,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     }
 
     // ── 调 Backend init（鉴权 + 创建 Task + 返回 AI 调用配置）──────────────
-    // 透传前端 X-Tenant-ID，让 Backend 正确识别租户上下文
+    // 透传前端 X-Tenant-ID / X-Session-Token，让 Backend 正确识别租户和会话上下文
     const forwardHeaders: Record<string, string> = {}
     const tenantId = request.headers['x-tenant-id']
     if (typeof tenantId === 'string') forwardHeaders['X-Tenant-ID'] = tenantId
+    if (sessionToken) forwardHeaders['X-Session-Token'] = sessionToken
 
     let initResult
     try {

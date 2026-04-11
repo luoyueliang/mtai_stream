@@ -1,6 +1,6 @@
 {
   "name": "mtai-stream",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "mtai 流式代理服务 — SSE streaming layer between Dify/apisvr and browser",
   "private": true,
   "scripts": {
