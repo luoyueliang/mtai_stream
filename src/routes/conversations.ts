@@ -55,7 +55,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     } catch (err: unknown) {
       const status = (err as { statusCode?: number }).statusCode ?? 502
       const message = err instanceof Error ? err.message : 'Backend 初始化失败'
-      return reply.status(status).send({ message })
+      const errorBody = (err as { errorBody?: Record<string, unknown> }).errorBody
+      // 透传 Backend JSON 结构（含 error_code 等字段），无结构化时回退纯 message
+      return reply.status(status).send(errorBody ?? { message })
     }
 
     // ── 建立 SSE 流 ──────────────────────────────────────────────────────

@@ -54,10 +54,16 @@ export async function initStream(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    const err = new Error(text || `Backend init 失败 [${res.status}]`) as Error & {
+    // 尝试解析 JSON 以保留 error_code 等结构化字段
+    let parsed: Record<string, unknown> | null = null
+    try { parsed = JSON.parse(text) } catch { /* 非 JSON，忽略 */ }
+    const message = (parsed?.message as string) || text || `Backend init 失败 [${res.status}]`
+    const err = new Error(message) as Error & {
       statusCode: number
+      errorBody: Record<string, unknown> | null
     }
     err.statusCode = res.status
+    err.errorBody = parsed
     throw err
   }
 
