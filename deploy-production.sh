@@ -2,7 +2,7 @@
 # ============================================================
 # aistudio_stream 生产环境部署脚本
 # 目标服务器: 47.94.7.102:15922 (ecs-user)
-# 部署目录: /app/web-stream/
+# 部署目录: /app/mtai_stream/  (PM2 管理，应用名 mtai-stream)
 # 服务端口: 3100 (Nginx /stream/ → 127.0.0.1:3100)
 # ============================================================
 set -euo pipefail
@@ -15,7 +15,8 @@ SSH_USER="ecs-user"
 SSH="ssh -i ${SSH_KEY} -p ${SSH_PORT} -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST}"
 RSYNC_E="ssh -i ${SSH_KEY} -p ${SSH_PORT} -o StrictHostKeyChecking=no"
 EXCLUDE_FILE="${SCRIPT_DIR}/rsync-exclude.txt"
-DEPLOY_DIR="/app/web-stream"
+DEPLOY_DIR="/app/mtai_stream"
+PM2_APP="mtai-stream"
 
 # ---- 检查 SSH 密钥 ----
 if [ ! -f "$SSH_KEY" ]; then
@@ -96,10 +97,10 @@ fi
 
 ${SSH} << 'REMOTE'
 set -e
-cd /app/web-stream
+cd /app/mtai_stream
 
-ENV_TEMPLATE="/app/web-stream/.env.production"
-ENV_FILE="/app/web-stream/.env"
+ENV_TEMPLATE="/app/mtai_stream/.env.production"
+ENV_FILE="/app/mtai_stream/.env"
 
 # 合并策略：保留服务端现有值，仅将模板中新引入的键追加进去
 echo "  合并 .env（已有键保持不变，仅追加模板中新建的键）"
@@ -133,36 +134,13 @@ REMOTE
 
 # ---- 重启 stream 服务 ----
 echo ""
-echo "🔄 [5/5] 重启 stream 服务..."
+echo "🔄 [5/5] 重启 PM2 进程 ${PM2_APP}..."
 ${SSH} << 'REMOTE'
 set -e
 
-# 优先使用 supervisor，其次 pm2，最后 systemd
-if command -v supervisorctl &>/dev/null && sudo supervisorctl status web-stream 2>/dev/null; then
-  sudo supervisorctl restart web-stream
-  sleep 3
-  sudo supervisorctl status web-stream
-elif command -v pm2 &>/dev/null && pm2 list | grep -q web-stream; then
-  pm2 restart web-stream
-  sleep 2
-  pm2 status web-stream
-elif systemctl is-enabled web-stream &>/dev/null 2>&1; then
-  sudo systemctl restart web-stream
-  sleep 2
-  sudo systemctl status web-stream --no-pager
-else
-  echo "⚠️  未找到进程管理器 (supervisor/pm2/systemd)，请手动重启："
-  echo "    cd /app/web-stream && node dist/index.js"
-  echo ""
-  echo "  建议创建 supervisor 配置:"
-  echo "    [program:web-stream]"
-  echo "    command=node /app/web-stream/dist/index.js"
-  echo "    directory=/app/web-stream"
-  echo "    autostart=true"
-  echo "    autorestart=true"
-  echo "    stdout_logfile=/app/web-stream/stream.log"
-  echo "    stderr_logfile=/app/web-stream/stream-error.log"
-fi
+pm2 restart mtai-stream
+sleep 3
+pm2 show mtai-stream | head -20
 
 # 健康检查
 sleep 2
@@ -170,7 +148,8 @@ HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/health 
 if [ "$HTTP_CODE" = "200" ]; then
   echo "  ✅ 健康检查通过 (HTTP $HTTP_CODE)"
 else
-  echo "  ⚠️  健康检查失败 (HTTP $HTTP_CODE)，请检查日志"
+  echo "  ⚠️  健康检查失败 (HTTP $HTTP_CODE)，查看最近日志："
+  pm2 logs mtai-stream --lines 20 --nostream
 fi
 REMOTE
 
