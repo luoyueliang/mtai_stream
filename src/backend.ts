@@ -26,6 +26,10 @@ export interface StreamInitResult {
   temperature: number | null
   max_tokens: number | null
   enable_thinking: boolean
+  /** Backend 组装的 Memory 上下文文本（L1 会话摘要 + L2 用户记忆），为空表示无记忆 */
+  memory_context: string | null
+  /** 用户原始输入（用于 settle 后显式记忆检测） */
+  user_input: string
 }
 
 /**
@@ -104,5 +108,33 @@ export async function settleTask(taskId: number, payload: SettlePayload): Promis
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(`settle 回调失败 [${res.status}]: ${body}`)
+  }
+}
+
+// ── Memory Post-Process ─────────────────────────────────────────────────────
+
+/**
+ * settle 完成后触发 Backend Memory 后处理
+ *
+ * POST /api/internal/stream/{task_id}/memory-post-process
+ *
+ * Backend 负责：
+ * 1. 检测显式记忆指令（"请记住…"）并写入
+ * 2. 根据 round interval 决定是否生成会话摘要
+ * 3. 摘要完成后触发隐式记忆提取
+ *
+ * 本调用为 fire-and-forget，失败仅打日志，不影响 SSE 响应。
+ */
+export async function memoryPostProcess(taskId: number): Promise<void> {
+  const url = `${config.laravel.baseUrl}/api/internal/stream/${taskId}/memory-post-process`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: backendHeaders(),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`memory-post-process 失败 [${res.status}]: ${body}`)
   }
 }
