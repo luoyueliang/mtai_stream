@@ -146,6 +146,7 @@ export async function registerTaskRoutes(app: FastifyInstance): Promise<void> {
           status: (data as Record<string, unknown>).status,
           title: (data as Record<string, unknown>).title ?? null,
           output: (data as Record<string, unknown>).output ?? null,
+          error_message: (data as Record<string, unknown>).error_message ?? null,
           credits_used: (data as Record<string, unknown>).credits_used ?? 0,
           completed_at: (data as Record<string, unknown>).completed_at ?? null,
         })
